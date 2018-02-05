@@ -3,12 +3,12 @@
 '''tileenvelope.py
 
 Usage:
-    tileenvelope.py generate-indices from <file> [--output OUTPUT --scale SCALE --size SIZE --input-sr SR]
+    tileenvelope.py generate-indices from <file> [--output OUTPUT --scale SCALE --size SIZE]
 
 Options:
-    --output OUTPUT           output location
-    --scale SCALE             the scale at which the image was taken [default: Scale]
-    --size SIZE               the size of the image in inches [default: FrameFormat]
+    --output OUTPUT           output location. defaults to the <file> input with `_tileenvelope` appended.
+    --scale SCALE             the attribute name containing the scale at which the image was taken [default: Scale]
+    --size SIZE               the attribute name containing the size of the image in inches [default: FrameFormat]
 '''
 
 import re
