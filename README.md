@@ -1,6 +1,7 @@
 # Tilenvelope
 
 creating polygons from photo imagery centroids
+![image](https://user-images.githubusercontent.com/325813/35831500-27dad7dc-0a87-11e8-84f2-bcb5ec63f013.png)
 
 ## Install
 
