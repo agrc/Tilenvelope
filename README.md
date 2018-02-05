@@ -8,10 +8,11 @@ creating polygons from photo imagery centroids
 
 ## Assumptions
 
+1. Input data will be contained in a file geodatabase
 1. Input data will be a point feature class
 1. Input data will have a 26912 projection
-1. Input data will have a frame format attribute in the format of `LxW Inches`
-1. Input data will have a scale attribute as a number or in a number format
+1. Input data will have a frame format attribute in the format of `LxW Inches` where `L` and `W` are numbers
+1. Input data will have a number type scale attribute or convertable to a number format
 
 ## Usage
 
