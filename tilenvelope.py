@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # * coding: utf8 *
-'''raster.py
+'''tileenvelope.py
 
 Usage:
-    raster.py generate-indices from <file> [--output OUTPUT --code CODE --scale SCALE --filename FILENAME --size SIZE --input-sr SR]
+    tileenvelope.py generate-indices from <file> [--output OUTPUT --scale SCALE --size SIZE --input-sr SR]
 
 Options:
     --output OUTPUT           output location
     --scale SCALE             the scale at which the image was taken [default: Scale]
-    --filename FILENAME       the file name field name [default: Filename]
     --size SIZE               the size of the image in inches [default: FrameFormat]
-    --code CODE               the code to link up in GSC [default: ProjectCode]
 '''
 
 import re
@@ -23,21 +21,17 @@ import arcpy
 arcpy.env.overwriteOutput = True
 nad83 = arcpy.SpatialReference(26912)
 inches_in_meter = 39.37008
-output_fields = ['filename', 'projectcode', 'error', 'SHAPE@']
 batch_size = 5000
 i = 0
 activity = ['/', '-', '\\', '|']
 
 
-def create_polygon(scale, size, shape, sr):
+def create_polygon(scale, size, shape):
     #: get utm centroid
     coords = arcpy.Point(*shape)
-    centroid = arcpy.PointGeometry(coords, sr)
+    centroid = arcpy.PointGeometry(coords, nad83)
 
-    if sr.name != nad83.name:
-        utm = centroid.projectAs(nad83, 'NAD_1983_To_WGS_1984_5').centroid
-    else:
-        utm = centroid.centroid
+    utm = centroid.centroid
 
     if utm.X < 15000 or utm.X > 707933:
         return 'centroid: {},{}'.format(shape[0], shape[1]), arcpy.Polygon(arcpy.Point(0, 0))
@@ -47,6 +41,9 @@ def create_polygon(scale, size, shape, sr):
 
     if scale is None:
         return 'scale: {}'.format(scale), arcpy.Polygon(arcpy.Point(0, 0))
+
+    if not isinstance(scale, (int, float, complex)):
+        scale = float(scale)
 
     #: pull out size information
     expected_matches = 2
@@ -80,14 +77,18 @@ def create_polygon(scale, size, shape, sr):
     return None, arcpy.Polygon(coords, nad83)
 
 
+def create_field_mapping(cursor):
+    return dict((field.lower(), i) for i, field in enumerate(cursor.fields))
+
+
 if __name__ == '__main__':
-    arguments = docopt(__doc__, version='raster 1.0.0')
+    arguments = docopt(__doc__, version='tileenvelope 1.0.0')
 
     if arguments['generate-indices']:
         input_file = arguments['<file>'].lower()
         output_file = arguments['--output']
-        scale = arguments['--scale']
-        size = arguments['--size']
+        scale = arguments['--scale'].lower()
+        size = arguments['--size'].lower()
 
         if not arcpy.Exists(input_file):
             print('{} does not exist'.format(input_file))
@@ -100,6 +101,10 @@ if __name__ == '__main__':
         gdb, name = input_file.split('.gdb')
         gdb = gdb + '.gdb'
 
+        if name == '':
+            print('Add the point feature class to the gdb input string')
+            sys.exit()
+
         if arcpy.Describe(gdb).workspaceType != 'LocalDatabase':
             print('please use a file geodatabase for this tool')
             sys.exit()
@@ -107,6 +112,10 @@ if __name__ == '__main__':
         input_description = arcpy.Describe(input_file)
         if input_description.shapeType != 'Point':
             print('please input a point feature class for this tool')
+            sys.exit()
+
+        if input_description.SpatialReference.factoryCode != nad83.factoryCode:
+            print('project your data to utm nad83z12n (26912)')
             sys.exit()
 
         if not output_file:
@@ -130,16 +139,33 @@ if __name__ == '__main__':
             arcpy.management.AddField(output_file, 'error', 'TEXT', field_length=250)
 
         #: read photo centroid info
-        # with arcpy.da.SearchCursor(input_file, ['*']) as cursor:
-        #     with arcpy.da.InsertCursor(output_file, output_fields) as insert_cursor:
-        #         for scale, size, file_name, code, shape in cursor:
-        #             i += 1
-        #             error, shape = create_polygon(scale, size, shape)
-        #
-        #             insert_cursor.insertRow((file_name, code, error, shape))
-        #
-        #             sys.stdout.write('\r{}'.format(activity[i % 4]))
-        #             sys.stdout.flush()
-        #
-        #             if i % batch_size == 0:
-        #                 print('\n created {} polygons'.format(i))
+        with arcpy.da.SearchCursor(input_file, ['*']) as cursor:
+            mapping = create_field_mapping(cursor)
+            scale_index = mapping[scale]
+            size_index = mapping[size]
+
+            fields = list(cursor.fields)
+            fields.append('error')
+            fields[mapping['shape']] = 'shape@'
+
+            with arcpy.da.InsertCursor(output_file, fields) as insert_cursor:
+                output_mapping = create_field_mapping(insert_cursor)
+
+                for row in cursor:
+                    i += 1
+                    scale = row[scale_index]
+                    size = row[size_index]
+                    shape = row[mapping['shape']]
+                    error, shape = create_polygon(scale, size, shape)
+
+                    row = list(row)
+                    row[output_mapping['shape@']] = shape
+                    row.append(error)
+
+                    insert_cursor.insertRow(row)
+
+                    sys.stdout.write('\r{}'.format(activity[i % 4]))
+                    sys.stdout.flush()
+
+                    if i % batch_size == 0:
+                        print('\n created {} polygons'.format(i))
